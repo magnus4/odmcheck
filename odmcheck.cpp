@@ -41,26 +41,20 @@
 #include <minui/minui.h>
 
 // Remove the line below for shutdown at mismatch
-#define WARN_ONLY
+#define ODMCHECK_WARN_ONLY
 
 #define LOGV(x...) do { KLOG_DEBUG("odmcheck", x); } while (0)
 #define LOGE(x...) do { KLOG_ERROR("odmcheck", x); } while (0)
 #define LOGW(x...) do { KLOG_WARNING("odmcheck", x); } while (0)
 
-#ifdef ODM_SIMULATION
-static const char *PROC_VERSION = "proc_version";
-static const char *VERSION_FILE = "odm_version.prop";
-#else
 static const char *PROC_VERSION = "/proc/version";
 static const char *VERSION_FILE = "/odm/odm_version.prop";
-#endif
 static const char *ODM_DIR = "/odm", *ROOT_DIR = "/";
 
 static const char *TAG_KERNEL_VERSION = "ro.kernel.version";
 static const char *TAG_ANDROID_VERSION = "ro.build.version";
 static const char *TAG_ODM_REVISION = "ro.vendor.version";
 static const char *TAG_PLATFORM_VERSION = "ro.platform.version";
-//static const char *BUILD_PROP_KERNEL_VERSION = "ro.build.kernel";
 static const char *BUILD_PROP_ANDROID_VERSION = "ro.build.version.release";
 static const char *BUILD_PROP_ODM_VERSION = "ro.vendor.version";
 static const char *BUILD_PROP_PLATFORM_VERSION = "ro.board.platform";
@@ -125,7 +119,6 @@ char *odmcheck_strip_both(char *s) {
 	*p = 0;
 	return s;
 }
-
 
 int odmcheck_read_version_file(const char *file_path, struct odmcheck_version_info *info) {
 	char line[256];
@@ -291,7 +284,7 @@ int main(int argc __attribute__((unused)), char **argv __attribute__((unused)))
 	}
 	if (ret) {
 		odmcheck_display_error(&info, &build_info);
-#ifndef WARN_ONLY
+#ifndef ODMCHECK_WARN_ONLY
 		odmcheck_shutdown();
 #endif
 	}
