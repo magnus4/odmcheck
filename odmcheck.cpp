@@ -41,20 +41,32 @@
 #include <minui/minui.h>
 
 // Remove the line below for shutdown at mismatch
-#define ODMCHECK_WARN_ONLY
+#define WARN_ONLY
 
+#ifdef KLOG_DEBUG
 #define LOGV(x...) do { KLOG_DEBUG("odmcheck", x); } while (0)
 #define LOGE(x...) do { KLOG_ERROR("odmcheck", x); } while (0)
 #define LOGW(x...) do { KLOG_WARNING("odmcheck", x); } while (0)
+#else
+#define LOGV(x...) do { printf(x); } while (0)
+#define LOGE(x...) do { printf(x); } while (0)
+#define LOGW(x...) do { printf(x); } while (0)
+#endif
 
+#ifdef ODM_SIMULATION
+static const char *PROC_VERSION = "proc_version";
+static const char *VERSION_FILE = "odm_version.prop";
+#else
 static const char *PROC_VERSION = "/proc/version";
 static const char *VERSION_FILE = "/odm/odm_version.prop";
+#endif
 static const char *ODM_DIR = "/odm", *ROOT_DIR = "/";
 
 static const char *TAG_KERNEL_VERSION = "ro.kernel.version";
 static const char *TAG_ANDROID_VERSION = "ro.build.version";
 static const char *TAG_ODM_REVISION = "ro.vendor.version";
 static const char *TAG_PLATFORM_VERSION = "ro.platform.version";
+//static const char *BUILD_PROP_KERNEL_VERSION = "ro.build.kernel";
 static const char *BUILD_PROP_ANDROID_VERSION = "ro.build.version.release";
 static const char *BUILD_PROP_ODM_VERSION = "ro.vendor.version";
 static const char *BUILD_PROP_PLATFORM_VERSION = "ro.board.platform";
@@ -208,7 +220,7 @@ int odmcheck_compare_versions(struct odmcheck_version_info *info, struct odmchec
 	return ret;
 }
 
-static int odmcheck_draw_text(const char *str, int x, int y)
+static int odmcheck_draw_text(const char *str, int x, int y, bool bold)
 {
 	int str_len_px = gr_measure(gr_sys_font(), str);
 
@@ -216,15 +228,28 @@ static int odmcheck_draw_text(const char *str, int x, int y)
 		x = (gr_fb_width() - str_len_px) / 2;
 	if (y < 0)
 		y = (gr_fb_height() - char_height) / 2;
-	gr_text(gr_sys_font(), x, y, str, 0);
+	gr_text(gr_sys_font(), x, y, str, bold);
 
 	return y + char_height;
 }
 
+static int odmcheck_draw_text(const char *str, int x, int y) {
+	return odmcheck_draw_text(str, x, y, 0);
+}
+
 static void odmcheck_mk_version_str(struct odmcheck_version_info *info, char *buf, size_t buflen)
 {
-	snprintf(buf, buflen, "Android: %s Kernel: %s Platform: %s ODM rev: %s",
+	snprintf(buf, buflen, "AND: %s KRN: %s PLF: %s ODM: %s",
 	         info->android_version, info->kernel_version, info->platform_version, info->odm_revision);
+}
+
+static int odmcheck_init_minui(GRSurface **icon_error)
+{
+	int res = res_create_display_surface("icon_error", icon_error);	
+	if (res) {
+		LOGE("Failed to read icon_error.png\n");
+	}
+	return res;
 }
 
 /*
@@ -234,21 +259,37 @@ static void odmcheck_mk_version_str(struct odmcheck_version_info *info, char *bu
  */
 static int odmcheck_display_error(struct odmcheck_version_info *info, struct odmcheck_version_info *build_info)
 {
+	GRSurface *icon_error;
 	char buf[1024];
+	int y = 0, step_x, step_y;
 	gr_init();
+	odmcheck_init_minui(&icon_error);
 	gr_font_size(gr_sys_font(), &char_width, &char_height);
+	step_x = char_width;
+	step_y = char_height / 2;
 	odmcheck_set_backlight(true);
-	gr_color(0,128,255,255);
+	//gr_color(0,128,255,255);
+	gr_color(0,0,0,255);
 	gr_clear();
+	int icon_width = gr_get_width(icon_error);
+	int icon_height = gr_get_height(icon_error);
+	int icon_x = (gr_fb_width() - icon_width) / 2;
+	int icon_y = gr_fb_height() / 4 - icon_height / 2;
+	gr_blit(icon_error, 0, 0, icon_width, icon_height, icon_x, icon_y);
+	y += icon_y + icon_height + step_y;
 //	gr_color(128,255,0,255);
 //	gr_fill(100, 100, 200, 200);
 	gr_color(255,255,255,255);
 	odmcheck_mk_version_str(info, buf, sizeof(buf));
-	odmcheck_draw_text("odm_version.prop", 50, 300);
-	odmcheck_draw_text(buf, 50, 350);
+	odmcheck_draw_text("odm_version.prop", step_x, y, true);
+	y += char_height + step_y;
+	odmcheck_draw_text(buf, step_x, y);  // ....
+	y += char_height + step_y;
 	odmcheck_mk_version_str(build_info, buf, sizeof(buf));
-	odmcheck_draw_text("build.prop", 50, 400);
-	odmcheck_draw_text(buf, 50, 450);
+	odmcheck_draw_text("build.prop", step_x, y, true);
+	y += char_height + step_y;
+	odmcheck_draw_text(buf, step_x, y);
+	y += char_height + step_y;
 	gr_flip();
 	sleep(10);
 	odmcheck_set_backlight(false);
@@ -284,7 +325,7 @@ int main(int argc __attribute__((unused)), char **argv __attribute__((unused)))
 	}
 	if (ret) {
 		odmcheck_display_error(&info, &build_info);
-#ifndef ODMCHECK_WARN_ONLY
+#ifndef WARN_ONLY
 		odmcheck_shutdown();
 #endif
 	}
